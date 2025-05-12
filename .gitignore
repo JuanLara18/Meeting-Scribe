@@ -82,3 +82,6 @@ ipython_config.py
 *.mp4
 results/
 *.env
+
+# Others
+whisper_src/
