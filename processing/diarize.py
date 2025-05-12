@@ -4,7 +4,7 @@
 # producing “who spoke when” time intervals.
 
 
-from typing import List, Dict
+from typing import List, Dict, Any
 
 class SpeakerDiarizer:
     """
