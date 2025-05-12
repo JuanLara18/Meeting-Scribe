@@ -218,6 +218,14 @@ def main():
     if success:
         print_header("Setup Complete!")
         
+        # Check Python version for Whisper installation advice
+        major, minor = sys.version_info.major, sys.version_info.minor
+        if major == 3 and minor >= 13:
+            print("IMPORTANT: Python 3.13 detected - Whisper may need special installation.")
+            print("Run the following command next:")
+            print("    python whisper_install.py")
+            print("")
+        
         # Determine activation command based on platform
         system = platform.system().lower()
         if system == "windows":

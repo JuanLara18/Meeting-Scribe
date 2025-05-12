@@ -66,7 +66,7 @@ The script will:
 
 ```bash
 # Clone the repository
-git clone https://github.com/JuanLara18/meetingscribe.git
+git clone https://github.com/your-user/meetingscribe.git
 cd meetingscribe
 
 # Create and activate virtual environment
@@ -116,20 +116,34 @@ If you encounter issues installing the Whisper package, try these steps:
 pip install git+https://github.com/openai/whisper.git@248b6cb124225dd263bb9bd32d060b6517e067f8
 ```
 
-### Python 3.13 Compatibility
+## Python 3.13 Specific Instructions
 
-Some packages may have issues with Python 3.13 as it's very recent. If you're using Python 3.13:
+**Using Python 3.13 requires special handling for the Whisper package.**
 
-1. Install core packages individually:
+After running the basic setup, use our dedicated installer script:
+
 ```bash
-pip install numpy torch torchaudio ffmpeg-python tqdm click rich python-dotenv
+# After initial setup.py completes (even with Whisper errors):
+python whisper_install.py
 ```
 
-2. Install Whisper from GitHub (as shown above)
+This script will:
+1. Clone the Whisper repository
+2. Patch it for Python 3.13 compatibility 
+3. Install it directly
 
-3. Try installing remaining packages:
+If this fails, try the manual approach:
+
 ```bash
-pip install -r requirements.txt
+# Clone whisper
+git clone https://github.com/openai/whisper.git
+cd whisper
+
+# Edit setup.py - replace "version=read_version()" with "version='20240930'"
+# (Use any text editor to make this change)
+
+# Install from local directory
+pip install -e .
 ```
 
 ### Missing diarization models
