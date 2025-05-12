@@ -77,3 +77,8 @@ ipython_config.py
 
 # OS generated files
 .D
+
+# Private files
+*.mp4
+results/
+*.env
