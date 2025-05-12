@@ -43,3 +43,5 @@ python-dotenv>=1.0.0               # Environment variable loading
 # Optional: for GPU acceleration (comment out if not using CUDA)
 # torch>=2.0.0+cu118               # Replace the CPU torch with this for CUDA 11.8
 # torchaudio>=2.0.0+cu118          # Make sure CUDA version matches torch
+
+-e ./whisper_src      # install your patched Whisper in editable mode

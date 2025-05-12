@@ -66,7 +66,7 @@ The script will:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-user/meetingscribe.git
+git clone https://github.com/JuanLara18/meetingscribe.git
 cd meetingscribe
 
 # Create and activate virtual environment
