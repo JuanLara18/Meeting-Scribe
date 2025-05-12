@@ -1,12 +1,12 @@
 # Installation Guide for MeetingScribe
 
-This guide provides detailed instructions for setting up MeetingScribe on different operating systems.
+This guide provides detailed instructions for setting up MeetingScribe on different operating systems, with special focus on Python 3.13 compatibility.
 
 ## Prerequisites
 
-### Python 3.10 - 3.12 (Recommended)
+### Python 3.10 - 3.13
 
-MeetingScribe works best with Python 3.10, 3.11, or 3.12. Python 3.13 is supported but may require manual dependency installation. Verify your Python version with:
+MeetingScribe works with Python 3.10, 3.11, 3.12, and 3.13. Verify your Python version with:
 
 ```bash
 python --version
@@ -59,7 +59,7 @@ python setup.py
 The script will:
 1. Check Python version and FFmpeg installation
 2. Create a virtual environment
-3. Install all dependencies
+3. Install most dependencies
 4. Guide you through Hugging Face authentication
 
 ### Option 2: Manual Installation
@@ -81,6 +81,64 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
+
+## Python 3.13 Installation (Special Instructions)
+
+**For Python 3.13 users, the Whisper installation requires a special approach**
+
+After running the basic setup (which may show Whisper installation errors), use our dedicated installer script:
+
+```bash
+# After initial setup.py completes (even with Whisper errors):
+python whisper_install.py
+```
+
+This script will:
+1. Clone the Whisper repository
+2. Patch its configuration files for Python 3.13 compatibility
+3. Install it directly using the appropriate method
+
+The script tries multiple installation methods and includes fallbacks if needed.
+
+### Whisper Installation Troubleshooting
+
+If the automated script fails, you can try manual installation:
+
+1. Clone the repository:
+```bash
+git clone https://github.com/openai/whisper.git
+cd whisper
+```
+
+2. Edit `pyproject.toml`:
+   - Find any dynamic version settings like `dynamic = ["version"]` or `version = {attr = ...}`
+   - Replace with `version = "20240930"`
+
+3. Create a version file:
+```bash
+# Create whisper/__version__.py with this content:
+echo '__version__ = "20240930"' > whisper/__version__.py
+```
+
+4. Install with build isolation disabled:
+```bash
+pip install --no-build-isolation -e .
+```
+
+5. Verify installation:
+```bash
+python -c "import whisper; print('Whisper installed!')"
+```
+
+### Alternative: Using faster-whisper
+
+If you continue to face issues with Whisper installation, you can use faster-whisper as an alternative:
+
+```bash
+pip install faster-whisper
+```
+
+Then modify `processing/transcribe.py` to use faster-whisper instead of OpenAI's Whisper. This change will require some code adaptations but can work as a replacement.
 
 ## Speaker Diarization Setup
 
@@ -105,46 +163,7 @@ For faster processing on compatible hardware:
    pip install -r requirements.txt
    ```
 
-## Troubleshooting
-
-### Whisper Installation Issues
-
-If you encounter issues installing the Whisper package, try these steps:
-
-```bash
-# Activate your virtual environment first, then:
-pip install git+https://github.com/openai/whisper.git@248b6cb124225dd263bb9bd32d060b6517e067f8
-```
-
-## Python 3.13 Specific Instructions
-
-**Using Python 3.13 requires special handling for the Whisper package.**
-
-After running the basic setup, use our dedicated installer script:
-
-```bash
-# After initial setup.py completes (even with Whisper errors):
-python whisper_install.py
-```
-
-This script will:
-1. Clone the Whisper repository
-2. Patch it for Python 3.13 compatibility 
-3. Install it directly
-
-If this fails, try the manual approach:
-
-```bash
-# Clone whisper
-git clone https://github.com/openai/whisper.git
-cd whisper
-
-# Edit setup.py - replace "version=read_version()" with "version='20240930'"
-# (Use any text editor to make this change)
-
-# Install from local directory
-pip install -e .
-```
+## Common Problems and Solutions
 
 ### Missing diarization models
 
@@ -157,15 +176,23 @@ If you encounter errors about missing diarization models:
 python -c "from pyannote.audio import Pipeline; Pipeline.from_pretrained('pyannote/speaker-diarization', use_auth_token='YOUR_TOKEN_HERE')"
 ```
 
-### Other issues
+### Whisper module import errors
 
-For other dependency issues, try installing the minimal set needed to run:
+If you see import errors after installing Whisper:
 
+1. Make sure your virtual environment is activated
+2. Try reinstalling with the direct GitHub URL:
 ```bash
-pip install torch torchaudio ffmpeg-python rich
-pip install git+https://github.com/openai/whisper.git@248b6cb124225dd263bb9bd32d060b6517e067f8
-pip install pyannote.audio
+pip install git+https://github.com/openai/whisper.git@main
 ```
+
+### FFmpeg-related errors
+
+If you see errors related to FFmpeg:
+
+1. Verify FFmpeg is installed with `ffmpeg -version`
+2. Ensure it's in your system PATH
+3. On Windows, you might need to restart your terminal after installing FFmpeg
 
 ## Verification
 
@@ -176,3 +203,13 @@ python main.py --help
 ```
 
 You should see the command-line help information for MeetingScribe.
+
+## Running MeetingScribe
+
+After successful installation:
+
+```bash
+python main.py path/to/your/video.mp4
+```
+
+The transcription and diarization results will be saved in the `results/` folder.
