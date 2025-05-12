@@ -1,0 +1,29 @@
+# requirements.txt
+
+# Core system
+ffmpeg                          # must be installed on your OS
+
+# ASR
+openai-whisper                  # Whisper speech-to-text
+ffmpeg-python                   # FFmpeg bindings
+moviepy                         # video processing
+pydub                           # simple audio slicing
+
+# Audio features
+librosa                         # audio analysis
+soundfile                       # WAV I/O
+
+# Deep learning
+torch                           # PyTorch
+transformers                    # model utilities
+
+# Diarization
+pyannote.audio                  # speaker diarization
+huggingface-hub                 # model download/auth
+
+# Utilities
+numpy                           # numerical arrays
+tqdm                            # progress bars
+click                           # CLI framework
+rich                            # rich terminal output
+python-dotenv                   # load .env settings
