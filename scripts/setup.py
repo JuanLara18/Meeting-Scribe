@@ -200,6 +200,10 @@ def main():
     """Main setup function."""
     print_header("MeetingScribe Setup")
     
+    # Check if script is run from the correct directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(os.path.dirname(script_dir)) 
+    
     # Run all checks and setup steps
     steps = [
         check_python_version,

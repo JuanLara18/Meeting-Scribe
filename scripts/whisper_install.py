@@ -343,6 +343,10 @@ def main():
     """Main installation workflow"""
     print_header("Whisper Manual Installation (Python 3.13 Compatible)")
     
+    # Change to the script directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(os.path.dirname(script_dir))
+    
     try:
         # Show Python version
         python_version = sys.version.split()[0]

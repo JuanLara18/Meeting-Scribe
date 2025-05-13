@@ -28,7 +28,7 @@ cd meetingscribe
 
 # 2. Create env & install deps
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r config/requirements.txt
 
 # 3. Run on a sample video
 python main.py path/to/meeting.mp4
