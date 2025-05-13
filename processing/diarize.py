@@ -138,13 +138,6 @@ class SpeakerDiarizer:
     def _detect_speech(self, y: np.ndarray, sr: int) -> List[Dict[str, float]]:
         """
         Detects speech segments using energy-based Voice Activity Detection.
-        
-        Args:
-            y: Audio signal
-            sr: Sample rate
-            
-        Returns:
-            List of speech segments as dicts with 'start' and 'end' times
         """
         self.logger.debug("Performing Voice Activity Detection")
         
@@ -204,14 +197,6 @@ class SpeakerDiarizer:
     def _extract_features(self, y: np.ndarray, sr: int, segments: List[Dict[str, float]]) -> tuple:
         """
         Extracts MFCC features from audio segments.
-        
-        Args:
-            y: Audio signal
-            sr: Sample rate
-            segments: List of speech segments
-            
-        Returns:
-            Tuple of (feature_embeddings, segment_info)
         """
         self.logger.debug("Extracting audio features")
         
@@ -276,14 +261,6 @@ class SpeakerDiarizer:
     def _estimate_num_speakers(self, embeddings: np.ndarray, min_speakers: int, max_speakers: int) -> int:
         """
         Estimates the optimal number of speakers using the elbow method.
-        
-        Args:
-            embeddings: Feature embeddings
-            min_speakers: Minimum number of speakers
-            max_speakers: Maximum number of speakers
-            
-        Returns:
-            Estimated number of speakers
         """
         self.logger.debug("Estimating number of speakers")
         
@@ -303,7 +280,21 @@ class SpeakerDiarizer:
         possible_clusters = range(min_speakers, min(max_speakers + 1, len(embeddings) + 1))
         
         for n_clusters in possible_clusters:
-            clustering = AgglomerativeClustering(n_clusters=n_clusters, affinity='euclidean', linkage='ward')
+            # Use try-except block to handle different scikit-learn versions
+            try:
+                # Try with both parameters (newer scikit-learn versions)
+                clustering = AgglomerativeClustering(
+                    n_clusters=n_clusters, 
+                    affinity='euclidean', 
+                    linkage='ward'
+                )
+            except TypeError:
+                # Fallback for older versions or different parameter structure
+                clustering = AgglomerativeClustering(
+                    n_clusters=n_clusters,
+                    linkage='ward'
+                )
+            
             clustering.fit(embeddings)
             
             # Calculate distortion (within-cluster sum of squares)
@@ -317,7 +308,6 @@ class SpeakerDiarizer:
             distortions.append(distortion)
         
         # Find elbow point using the kneedle algorithm (simplified)
-        # We look for where the rate of change of distortion slows significantly
         if len(distortions) <= 1:
             return min_speakers
         
@@ -340,13 +330,6 @@ class SpeakerDiarizer:
     def _cluster_speakers(self, embeddings: np.ndarray, num_speakers: int) -> np.ndarray:
         """
         Clusters segment embeddings into speaker groups.
-        
-        Args:
-            embeddings: Feature embeddings
-            num_speakers: Number of speakers to cluster into
-            
-        Returns:
-            Array of speaker labels for each segment
         """
         self.logger.debug(f"Clustering segments into {num_speakers} speakers")
         
@@ -354,12 +337,21 @@ class SpeakerDiarizer:
         if len(embeddings) <= 1:
             return np.zeros(len(embeddings), dtype=int)
             
-        # Perform clustering
-        clustering = AgglomerativeClustering(
-            n_clusters=num_speakers, 
-            affinity='euclidean', 
-            linkage='ward'
-        )
+        # Use try-except block to handle different scikit-learn versions
+        try:
+            # Try with both parameters (newer scikit-learn versions)
+            clustering = AgglomerativeClustering(
+                n_clusters=num_speakers, 
+                affinity='euclidean', 
+                linkage='ward'
+            )
+        except TypeError:
+            # Fallback for older versions or different parameter structure
+            clustering = AgglomerativeClustering(
+                n_clusters=num_speakers,
+                linkage='ward'
+            )
+        
         labels = clustering.fit_predict(embeddings)
         
         return labels
@@ -367,13 +359,6 @@ class SpeakerDiarizer:
     def _create_speaker_segments(self, segment_info: List[Dict[str, Any]], speaker_labels: np.ndarray) -> List[Dict[str, Any]]:
         """
         Creates speaker segments from clustering results.
-        
-        Args:
-            segment_info: List of segment information dicts
-            speaker_labels: Array of speaker labels from clustering
-            
-        Returns:
-            List of speaker segments
         """
         self.logger.debug("Creating speaker segments from clustering results")
         
@@ -396,12 +381,6 @@ class SpeakerDiarizer:
     def _post_process_segments(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Post-processes segments to merge those from the same speaker.
-        
-        Args:
-            segments: List of speaker segments
-            
-        Returns:
-            List of processed speaker segments
         """
         self.logger.debug("Post-processing speaker segments")
         
