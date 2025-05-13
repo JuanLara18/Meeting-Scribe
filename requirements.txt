@@ -1,4 +1,4 @@
-# requirements.txt - MeetingScribe
+# requirements.txt - MeetingScribe (Updated)
 # ───────────────────────────────────────────────────────────────────
 
 # System dependencies (install these first via your OS package manager)
@@ -14,25 +14,19 @@ torch>=2.0.0                       # PyTorch base package
 torchaudio>=2.0.0                  # PyTorch audio functionality
 
 # ASR (Automatic Speech Recognition)
---extra-index-url https://download.pytorch.org/whl/cu118
-git+https://github.com/openai/whisper.git@248b6cb124225dd263bb9bd32d060b6517e067f8  # Use specific commit to avoid install issues
+#--extra-index-url https://download.pytorch.org/whl/cu118
+#git+https://github.com/openai/whisper.git@248b6cb124225dd263bb9bd32d060b6517e067f8  # Use specific commit to avoid install issues
 tokenizers>=0.13.0                 # Used by Whisper for tokenization
 
-# Speaker Diarization
-pyannote.audio>=2.1.1              # Speaker diarization pipeline
-pyannote.core>=4.5                 # Core functionality for pyannote
-pyannote.metrics>=3.2              # Evaluation metrics
-pyannote.pipeline>=2.3             # Pipeline utilities
-huggingface-hub>=0.16.4            # For model access and authentication
-
-# Audio analysis
+# Audio analysis and speaker diarization
 librosa>=0.10.0                    # Audio analysis tools
 soundfile>=0.12.1                  # Audio file I/O
+scikit-learn>=1.2.0                # For clustering algorithms
+webrtcvad-wheels>=2.0.10           # Optional: for better VAD (voice activity detection)
 
 # ML and data processing
-transformers>=4.29.0               # Transformer models from Hugging Face
 numpy>=1.24.0                      # Numerical processing
-scipy>=1.10.0                      # Scientific computing
+scipy>=1.10.0                      # Scientific computing 
 
 # Utilities
 tqdm>=4.65.0                       # Progress bars
@@ -45,3 +39,7 @@ python-dotenv>=1.0.0               # Environment variable loading
 # torchaudio>=2.0.0+cu118          # Make sure CUDA version matches torch
 
 -e ./whisper_src      # install your patched Whisper in editable mode
+
+# Note: pyannote.audio dependencies have been replaced with scikit-learn for
+# custom speaker diarization implementation. This eliminates the need for
+# Hugging Face authentication and model downloads.
