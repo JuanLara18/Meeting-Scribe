@@ -23,7 +23,7 @@
 
 ```bash
 # 1. Clone & enter
-git clone https://github.com/your‑user/meetingscribe.git
+git clone https://github.com/JuanLara18/Meeting-Scribe.git
 cd meetingscribe
 
 # 2. Create env & install deps
