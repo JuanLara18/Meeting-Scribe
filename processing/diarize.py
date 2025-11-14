@@ -12,6 +12,7 @@ import soundfile as sf
 from typing import List, Dict, Any, Optional
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import silhouette_score
 import warnings
 
 # Suppress specific warnings that might occur during processing
@@ -41,9 +42,10 @@ class SpeakerDiarizer:
         self.frame_length = 0.025  # 25ms frame
         self.frame_shift = 0.010   # 10ms hop
         self.n_mfcc = 20           # Number of MFCC coefficients
-        self.min_segment_dur = 0.5  # Minimum segment duration in seconds
-        self.vad_threshold = 0.3    # Energy threshold for VAD (tunable)
-        self.vad_pad_dur = 0.1      # Padding duration for VAD segments in seconds
+        self.min_segment_dur = 0.3  # Minimum segment duration in seconds (reduced for better granularity)
+        self.vad_threshold = 0.25   # Energy threshold for VAD (tuned for better detection)
+        self.vad_pad_dur = 0.15     # Padding duration for VAD segments in seconds (increased for context)
+        self.merge_threshold = 0.3  # Threshold for merging adjacent segments from same speaker
     
     def diarize(
         self,
@@ -196,135 +198,199 @@ class SpeakerDiarizer:
     
     def _extract_features(self, y: np.ndarray, sr: int, segments: List[Dict[str, float]]) -> tuple:
         """
-        Extracts MFCC features from audio segments.
+        Extracts comprehensive audio features from segments including:
+        - MFCCs (Mel-frequency cepstral coefficients)
+        - Spectral features (centroid, rolloff, contrast)
+        - Pitch and energy features
         """
-        self.logger.debug("Extracting audio features")
-        
+        self.logger.debug("Extracting enhanced audio features")
+
         # Initialize lists to store features and segment info
         all_embeddings = []
         segment_info = []
-        
+
         # For each speech segment
         for i, segment in enumerate(segments):
             start_sample = int(segment['start'] * sr)
             end_sample = int(segment['end'] * sr)
-            
+
             # Extract segment audio
             segment_audio = y[start_sample:end_sample]
-            
+
             # Skip if segment is too short
             if len(segment_audio) < sr * self.min_segment_dur:
                 continue
-                
+
             # Extract MFCCs
             mfccs = librosa.feature.mfcc(
-                y=segment_audio, 
+                y=segment_audio,
                 sr=sr,
-                n_mfcc=self.n_mfcc, 
+                n_mfcc=self.n_mfcc,
                 hop_length=int(self.frame_shift * sr),
                 n_fft=int(self.frame_length * sr)
             )
-            
+
             # Add delta and delta-delta features for better speaker discrimination
             delta_mfccs = librosa.feature.delta(mfccs)
             delta2_mfccs = librosa.feature.delta(mfccs, order=2)
-            
-            # Combine features and transpose to get time as first dimension
-            features = np.vstack([mfccs, delta_mfccs, delta2_mfccs]).T
-            
+
+            # Extract spectral features
+            spectral_centroid = librosa.feature.spectral_centroid(
+                y=segment_audio,
+                sr=sr,
+                hop_length=int(self.frame_shift * sr),
+                n_fft=int(self.frame_length * sr)
+            )
+
+            spectral_rolloff = librosa.feature.spectral_rolloff(
+                y=segment_audio,
+                sr=sr,
+                hop_length=int(self.frame_shift * sr),
+                n_fft=int(self.frame_length * sr)
+            )
+
+            spectral_contrast = librosa.feature.spectral_contrast(
+                y=segment_audio,
+                sr=sr,
+                hop_length=int(self.frame_shift * sr),
+                n_fft=int(self.frame_length * sr)
+            )
+
+            # Extract zero crossing rate (useful for voice distinction)
+            zcr = librosa.feature.zero_crossing_rate(
+                segment_audio,
+                frame_length=int(self.frame_length * sr),
+                hop_length=int(self.frame_shift * sr)
+            )
+
+            # Extract chroma features (pitch content)
+            chroma = librosa.feature.chroma_stft(
+                y=segment_audio,
+                sr=sr,
+                hop_length=int(self.frame_shift * sr),
+                n_fft=int(self.frame_length * sr)
+            )
+
+            # Combine all features
+            features = np.vstack([
+                mfccs,
+                delta_mfccs,
+                delta2_mfccs,
+                spectral_centroid,
+                spectral_rolloff,
+                spectral_contrast,
+                zcr,
+                chroma
+            ]).T
+
             # Handle edge case of very short segments
             if features.shape[0] == 0:
                 continue
-                
+
             # Compute segment embedding by averaging frame-level features
             embedding = np.mean(features, axis=0)
-            
+
             all_embeddings.append(embedding)
             segment_info.append({
                 'start': segment['start'],
                 'end': segment['end'],
                 'index': i
             })
-        
+
         # Convert to numpy array
         if all_embeddings:
             embeddings_array = np.vstack(all_embeddings)
-            
+
             # Normalize features
             scaler = StandardScaler()
             embeddings_array = scaler.fit_transform(embeddings_array)
-            
+
             return embeddings_array, segment_info
         else:
             return np.array([]), []
     
     def _estimate_num_speakers(self, embeddings: np.ndarray, min_speakers: int, max_speakers: int) -> int:
         """
-        Estimates the optimal number of speakers using the elbow method.
+        Estimates the optimal number of speakers using silhouette score and elbow method.
         """
         self.logger.debug("Estimating number of speakers")
-        
+
         # Handle edge cases
         if len(embeddings) <= min_speakers:
             return min_speakers
-            
+
         # If only one possible value, return it
         if min_speakers == max_speakers:
             return min_speakers
-            
+
         # Limit max_speakers to number of segments
         max_speakers = min(max_speakers, len(embeddings))
-        
-        # Try different numbers of clusters and compute distortion
+
+        # For very few embeddings, use simpler approach
+        if len(embeddings) < 4:
+            return min(min_speakers, len(embeddings))
+
+        # Try different numbers of clusters and compute metrics
+        silhouette_scores = []
         distortions = []
-        possible_clusters = range(min_speakers, min(max_speakers + 1, len(embeddings) + 1))
-        
+        possible_clusters = range(max(2, min_speakers), min(max_speakers + 1, len(embeddings)))
+
         for n_clusters in possible_clusters:
             # Use try-except block to handle different scikit-learn versions
             try:
-                # Try with both parameters (newer scikit-learn versions)
                 clustering = AgglomerativeClustering(
-                    n_clusters=n_clusters, 
-                    affinity='euclidean', 
+                    n_clusters=n_clusters,
+                    affinity='euclidean',
                     linkage='ward'
                 )
             except TypeError:
-                # Fallback for older versions or different parameter structure
                 clustering = AgglomerativeClustering(
                     n_clusters=n_clusters,
                     linkage='ward'
                 )
-            
-            clustering.fit(embeddings)
-            
+
+            labels = clustering.fit_predict(embeddings)
+
+            # Calculate silhouette score (higher is better)
+            try:
+                score = silhouette_score(embeddings, labels)
+                silhouette_scores.append(score)
+            except:
+                silhouette_scores.append(-1)
+
             # Calculate distortion (within-cluster sum of squares)
             distortion = 0
             for i in range(n_clusters):
-                cluster_points = embeddings[clustering.labels_ == i]
+                cluster_points = embeddings[labels == i]
                 if len(cluster_points) > 0:
                     centroid = np.mean(cluster_points, axis=0)
                     distortion += np.sum(np.linalg.norm(cluster_points - centroid, axis=1)**2)
-            
+
             distortions.append(distortion)
-        
-        # Find elbow point using the kneedle algorithm (simplified)
-        if len(distortions) <= 1:
-            return min_speakers
-        
-        # Calculate successive differences
-        diffs = np.diff(distortions)
-        
-        # Normalize differences
-        if np.max(np.abs(diffs)) > 0:
-            diffs = diffs / np.max(np.abs(diffs))
-        
-        # Look for elbow point (where difference becomes small)
-        elbow_threshold = 0.2
-        for i, diff in enumerate(diffs):
-            if abs(diff) < elbow_threshold:
-                return possible_clusters[i+1]
-        
-        # Default if no clear elbow found
+
+        # Find optimal number using silhouette score
+        if silhouette_scores and max(silhouette_scores) > 0:
+            best_idx = np.argmax(silhouette_scores)
+            best_n_clusters = possible_clusters[best_idx]
+            self.logger.debug(f"Best silhouette score: {silhouette_scores[best_idx]:.3f} for {best_n_clusters} speakers")
+            return best_n_clusters
+
+        # Fallback to elbow method if silhouette fails
+        if len(distortions) > 1:
+            # Calculate rate of change
+            diffs = np.diff(distortions)
+
+            # Normalize differences
+            if np.max(np.abs(diffs)) > 0:
+                diffs = diffs / np.max(np.abs(diffs))
+
+            # Look for elbow point (where difference becomes small)
+            elbow_threshold = 0.15
+            for i, diff in enumerate(diffs):
+                if abs(diff) < elbow_threshold:
+                    return possible_clusters[i+1]
+
+        # Default fallback
         return min(max(2, min_speakers), max_speakers)
     
     def _cluster_speakers(self, embeddings: np.ndarray, num_speakers: int) -> np.ndarray:
@@ -380,31 +446,35 @@ class SpeakerDiarizer:
     
     def _post_process_segments(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Post-processes segments to merge those from the same speaker.
+        Post-processes segments to merge those from the same speaker and filter very short segments.
         """
         self.logger.debug("Post-processing speaker segments")
-        
+
         if not segments:
             return []
-            
+
         # Sort by start time
         sorted_segments = sorted(segments, key=lambda s: s['start'])
-        
+
         # Merge adjacent segments from the same speaker
         merged = []
         current = sorted_segments[0].copy()
-        
+
         for segment in sorted_segments[1:]:
-            # If same speaker and small gap, merge
-            if (segment['speaker'] == current['speaker'] and 
-                segment['start'] - current['end'] < 0.5):  # 0.5s threshold for merging
+            # If same speaker and gap is within merge threshold, merge
+            gap = segment['start'] - current['end']
+            if segment['speaker'] == current['speaker'] and gap < self.merge_threshold:
                 current['end'] = segment['end']
             else:
-                # Add completed segment and start a new one
-                merged.append(current)
+                # Only add segment if it meets minimum duration
+                if current['end'] - current['start'] >= self.min_segment_dur:
+                    merged.append(current)
                 current = segment.copy()
-        
-        # Add the last segment
-        merged.append(current)
-        
+
+        # Add the last segment if it meets minimum duration
+        if current['end'] - current['start'] >= self.min_segment_dur:
+            merged.append(current)
+
+        self.logger.debug(f"Post-processing: {len(sorted_segments)} -> {len(merged)} segments")
+
         return merged

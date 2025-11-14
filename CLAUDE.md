@@ -10,10 +10,17 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
 
 **Key Features:**
 - High-quality multilingual transcription (OpenAI Whisper)
-- Automatic speaker diarization (custom implementation)
+- **GPU acceleration support** (CUDA and Apple Silicon MPS)
+- **Enhanced speaker diarization** with advanced audio features
+- **Word-level timestamps** for precise alignment
 - Markdown export with timestamps
 - One-command CLI interface
 - Fully offline, no cloud dependencies
+
+**Recent Improvements (v0.2):**
+- **GPU Support:** Automatic GPU detection with manual override (`--device` flag)
+- **Better Diarization:** Enhanced with spectral features, chroma, zero-crossing rate, and silhouette-based speaker estimation
+- **Improved Transcription:** Word-level timestamps, beam search, better defaults (small model), and quality-optimized parameters
 
 **Use Case:** Drop a meeting video (`.mp4`, `.mkv`, `.mov`) into the CLI and receive a clean, speaker-segmented transcript in Markdown format.
 
@@ -182,14 +189,15 @@ python main.py path/to/video.mp4
 
 **With options:**
 ```bash
-python main.py meeting.mp4 --lang es --model medium --output results/
+python main.py meeting.mp4 --lang es --model medium --device cuda --output results/
 ```
 
 **CLI Arguments:**
 - `video_path` (required): Path to input video
 - `--output`, `-o`: Output folder (default: `results/`)
 - `--lang`: ISO-639-1 language code (default: auto-detect)
-- `--model`: Whisper model size (default: `base`)
+- `--model`: Whisper model size (default: `small`)
+- `--device`: Compute device: `auto`, `cpu`, `cuda`, or `mps` (default: `auto`)
 - `--verbose`, `-v`: Enable debug logging
 
 ### Testing Components
@@ -291,27 +299,38 @@ if whisper_model not in valid_models:
 | Model | Parameters | Speed | Accuracy | Use Case |
 |-------|-----------|-------|----------|----------|
 | tiny | 39M | Fastest | Low | Quick tests |
-| base | 74M | Fast | Good | Default |
-| small | 244M | Medium | Better | Balanced |
+| base | 74M | Fast | Good | Light usage |
+| small | 244M | Medium | Better | **Default (balanced)** |
 | medium | 769M | Slow | High | Accuracy focus |
 | large-v3 | 1550M | Slowest | Highest | Production |
 
+**Transcription Quality Enhancements:**
+- Word-level timestamps for precise alignment
+- Beam search (size=5) for better accuracy
+- Temperature=0.0 for consistent/deterministic output
+- Condition on previous text for contextual consistency
+
 ### Diarization Algorithm Details
-**Feature Extraction:**
-- 20 MFCC coefficients
-- Delta coefficients (velocity)
-- Delta-delta coefficients (acceleration)
-- Total: 60 features per frame
+**Feature Extraction (Enhanced):**
+- 20 MFCC coefficients + deltas + delta-deltas (60 features)
+- Spectral centroid (frequency distribution)
+- Spectral rolloff (high-frequency content)
+- Spectral contrast (7 bands for voice distinction)
+- Zero-crossing rate (voice/unvoiced detection)
+- Chroma features (12 pitch classes)
+- **Total: ~90 features per frame**
 
 **VAD (Voice Activity Detection):**
 - Energy-based thresholding
-- Threshold: 0.3 (tunable via `self.vad_threshold`)
-- Padding: 0.1s before/after speech
+- Threshold: 0.25 (tuned for better sensitivity)
+- Padding: 0.15s before/after speech (increased context)
+- Minimum segment: 0.3s (reduced for granularity)
 
 **Clustering:**
 - Algorithm: Agglomerative (Ward linkage)
 - Distance: Euclidean
-- Speaker estimation: Elbow method on distortion curve
+- **Speaker estimation: Silhouette score + elbow method**
+- Post-processing: Smart merging with 0.3s threshold
 
 ---
 
@@ -339,9 +358,13 @@ if whisper_model not in valid_models:
 1. No code changes needed (FFmpeg handles most formats)
 2. If issues arise, check FFmpeg codec support with: `ffmpeg -formats`
 
-### Adding GPU Support
-1. Change `device="cpu"` to `device="cuda"` in `main.py:176`
-2. Ensure CUDA-enabled PyTorch is installed (see `requirements.txt` comments)
+### Using GPU Acceleration
+1. GPU support is now built-in with automatic detection
+2. Use `--device auto` (default) for automatic GPU detection
+3. Use `--device cuda` to force CUDA GPU usage
+4. Use `--device mps` for Apple Silicon GPU
+5. Use `--device cpu` to disable GPU acceleration
+6. Ensure CUDA-enabled PyTorch is installed for NVIDIA GPUs (see `requirements.txt` comments)
 
 ---
 
@@ -381,11 +404,14 @@ if whisper_model not in valid_models:
 - **Details:** Script modifies version settings and installs with `--no-build-isolation`
 
 ### Speaker Diarization Accuracy
-- **Algorithm:** Custom implementation (not production-grade)
+- **Algorithm:** Enhanced custom implementation with advanced features
+- **Features:** MFCCs, spectral features, chroma, zero-crossing rate, silhouette-based clustering
+- **Speaker Estimation:** Automatic using silhouette score and elbow method
+- **Improvements:** Better VAD, enhanced feature extraction, smarter post-processing
 - **Limitations:**
   - May struggle with overlapping speech
   - Requires distinct speaker voices
-  - Optimal for 2-5 speakers
+  - Optimal for 2-8 speakers
 - **Future:** Consider pyannote.audio integration with optional Hugging Face auth
 
 ---
@@ -571,7 +597,15 @@ Follow conventional commits:
 | Version | Date | Changes |
 |---------|------|---------|
 | 0.1 | 2024 | Initial release with transcription + diarization |
-| Current | 2025-11-14 | Added CLAUDE.md documentation |
+| 0.2 | 2025-11-14 | GPU support, enhanced diarization, improved transcription quality, CLAUDE.md documentation |
+
+**v0.2 Improvements:**
+- GPU acceleration with automatic detection (CUDA, MPS, CPU)
+- Enhanced speaker diarization with spectral features, chroma, and silhouette-based clustering
+- Word-level timestamps for precise alignment
+- Improved Whisper transcription with beam search and better defaults (small model)
+- Updated CLI with `--device` flag
+- Comprehensive documentation updates
 
 ---
 

@@ -9,6 +9,8 @@ import argparse
 import logging
 from typing import Dict, List, Any, Optional, Tuple
 
+import torch
+
 from processing.audio import AudioExtractor
 from processing.transcribe import WhisperTranscriber
 from processing.diarize import SpeakerDiarizer
@@ -23,6 +25,42 @@ logging.basicConfig(
         logging.StreamHandler(),
     ]
 )
+
+def get_device(device: str = "auto") -> str:
+    """
+    Determine the compute device to use.
+
+    Args:
+        device: One of "auto", "cpu", "cuda", or "mps" (for Apple Silicon)
+
+    Returns:
+        Device string ("cpu", "cuda", or "mps")
+    """
+    logger = logging.getLogger(__name__)
+
+    if device == "auto":
+        # Auto-detect best available device
+        if torch.cuda.is_available():
+            device = "cuda"
+            gpu_name = torch.cuda.get_device_name(0)
+            logger.info(f"GPU detected: {gpu_name}")
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            device = "mps"
+            logger.info("Apple Silicon GPU (MPS) detected")
+        else:
+            device = "cpu"
+            logger.info("No GPU detected, using CPU")
+    else:
+        # Validate user-specified device
+        if device == "cuda" and not torch.cuda.is_available():
+            logger.warning("CUDA requested but not available, falling back to CPU")
+            device = "cpu"
+        elif device == "mps" and not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
+            logger.warning("MPS requested but not available, falling back to CPU")
+            device = "cpu"
+
+    logger.info(f"Using device: {device}")
+    return device
 
 class MeetingScribe:
     """
@@ -39,19 +77,22 @@ class MeetingScribe:
         video_path: str,
         output_folder: str = "results/",
         language: str = None,
-        whisper_model: str = "base",
+        whisper_model: str = "small",
+        device: str = "auto",
     ):
         """
         Args:
           video_path    – path to input video file (.mp4/.mkv/.mov)
           output_folder – where transcript.json and .md will be created
           language      – ISO-639-1 code to force ASR language (None=auto)
-          whisper_model – one of ["tiny","base","small","medium","large-v3"]
+          whisper_model – one of ["tiny","base","small","medium","large-v3"] (default: small)
+          device        – compute device: "auto", "cpu", "cuda", or "mps"
         """
         self.video_path = video_path
         self.output_folder = output_folder
         self.language = language
         self.whisper_model = whisper_model
+        self.device = get_device(device)
         self.logger = logging.getLogger(__name__)
         
         # Ensure output folder ends with a slash for path consistency
@@ -140,11 +181,20 @@ class MeetingScribe:
         try:
             transcriber = WhisperTranscriber(
                 model_size=self.whisper_model,
+                device=self.device,
                 language=self.language,
-                verbose=True
+                verbose=True,
+                temperature=0.0,     # Greedy decoding for consistency
+                beam_size=5,         # Good balance of quality and speed
+                best_of=5,           # Multiple candidates for better quality
+                patience=1.0         # Standard beam search patience
             )
-            
-            transcript = transcriber.transcribe(wav_path)
+
+            # Transcribe with word-level timestamps for better alignment
+            transcript = transcriber.transcribe(
+                wav_path,
+                word_timestamps=True
+            )
             
             segment_count = len(transcript.get("segments", []))
             self.logger.info(f"Transcription complete with {segment_count} segments")
@@ -173,7 +223,7 @@ class MeetingScribe:
         self.logger.info("Step 3: Diarizing speakers")
         
         try:
-            diarizer = SpeakerDiarizer(device="cpu")  # 'cuda' could be used for GPU
+            diarizer = SpeakerDiarizer(device=self.device)
             diarization = diarizer.diarize(wav_path)
             
             # Get some basic stats about the diarization
@@ -285,9 +335,9 @@ def parse_args() -> argparse.Namespace:
     
     parser.add_argument(
         "--model",
-        default="base",
+        default="small",
         choices=["tiny", "base", "small", "medium", "large-v3"],
-        help="Whisper model size"
+        help="Whisper model size (default: small for better quality)"
     )
     
     parser.add_argument(
@@ -295,7 +345,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable verbose logging"
     )
-    
+
+    parser.add_argument(
+        "--device",
+        default="auto",
+        choices=["auto", "cpu", "cuda", "mps"],
+        help="Compute device (auto=detect GPU automatically)"
+    )
+
     return parser.parse_args()
 
 
@@ -312,7 +369,8 @@ def main() -> int:
             video_path=args.video_path,
             output_folder=args.output,
             language=args.lang,
-            whisper_model=args.model
+            whisper_model=args.model,
+            device=args.device
         )
         
         scribe.run()
